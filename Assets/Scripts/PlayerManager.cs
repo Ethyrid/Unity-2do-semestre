@@ -1,25 +1,35 @@
 using UnityEngine;
-using UnityEngine.AI;
 
 public class PlayerManager : MonoBehaviour
 {
-    Animator animator;
     InputManager inputManager;
-    CameraManager cameraManager;
     PlayerLocomotion playerLocomotion;
+    CameraManager cameraManager;
+    PlayerResource playerResource;
 
     public bool isInteracting;
 
     private void Awake()
     {
-        animator = GetComponent<Animator>();
         inputManager = GetComponent<InputManager>();
-        cameraManager = FindFirstObjectByType<CameraManager>();
         playerLocomotion = GetComponent<PlayerLocomotion>();
+        cameraManager = FindFirstObjectByType<CameraManager>();
+        playerResource = GetComponent<PlayerResource>();
     }
 
     private void Update()
     {
+
+        if (playerResource.IsAlive)
+        {
+            playerResource.HandleDrain(playerLocomotion.isSprinting);
+        }
+        else
+        {
+            isInteracting = true;
+            return;
+        }
+
         inputManager.HandleAllInputs();
     }
 
@@ -31,6 +41,5 @@ public class PlayerManager : MonoBehaviour
     private void LateUpdate()
     {
         cameraManager.HandleAllCameraMovement();
-        isInteracting = animator.GetBool("isInteracting");
     }
 }

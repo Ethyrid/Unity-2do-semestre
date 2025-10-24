@@ -9,11 +9,11 @@ public class CameraManager : MonoBehaviour
     public Transform cameraPivot;      // object camera to use to pivot (look up/down)
     public Transform cameraTransform;  // transform of the actual object in scene
     public LayerMask collisionsLayers; // layer camera collision 
-    private float defaultPosition;
-    private Vector3 cameraFollowVelocity = Vector3.zero;
-    private Vector3 cameraVectorPosition;
 
-    public float cameraCollisionOffSet = 0.2f;   //how much camera jump off of objects its colliding with
+    private float currentTargetZoom_Z;
+    private Vector3 cameraFollowVelocity = Vector3.zero;
+
+    public float cameraCollisionOffSet = 0.2f;
     public float minimumCollisionOffSet = 0.2f;
     public float cameraCollisionRadius = 0.2f;
     public float cameraFollowSpeed = 0.2f;
@@ -25,20 +25,45 @@ public class CameraManager : MonoBehaviour
     public float minimumPivotAngle = -35;
     public float maximumPivotAngle = 35;
 
+    [Header("Camera Zoom")]
+    [SerializeField] private float zoomStepAmount = 1.0f;
+    [SerializeField] private float zoomSmoothSpeed = 10f;
+    [SerializeField] private float minZoomDistance = 2f;
+    [SerializeField] private float maxZoomDistance = 10f;
+
+    [Header("Camera Smoothing")]
+    [SerializeField] private float rotationSmoothSpeed = 8f;
+
     private void Awake()
     {
         inputManager = FindFirstObjectByType<InputManager>();
         targetTransform = FindFirstObjectByType<PlayerManager>().transform;
         cameraTransform = Camera.main.transform;
-        defaultPosition = cameraTransform.localPosition.z;
+        currentTargetZoom_Z = cameraTransform.localPosition.z;
     }
 
     public void HandleAllCameraMovement()
     {
         FollowTarget();
         RotateCamera();
+        HandleZoom();
         HandleCameraCollisions();
+    }
 
+    private void HandleZoom()
+    {
+        float scrollInput = 0f;
+        if (Mouse.current != null)
+        {
+            scrollInput = Mathf.Sign(Mouse.current.scroll.y.ReadValue());
+        }
+
+        if (scrollInput != 0)
+        {
+            currentTargetZoom_Z += scrollInput * zoomStepAmount;
+        }
+
+        currentTargetZoom_Z = Mathf.Clamp(currentTargetZoom_Z, -maxZoomDistance, -minZoomDistance);
     }
 
     private void FollowTarget()
@@ -51,27 +76,28 @@ public class CameraManager : MonoBehaviour
 
     private void RotateCamera()
     {
-        Vector3 rotation;
-        Quaternion targetRotation;
-
         lookAngle = lookAngle + (inputManager.cameraInputX * cameraLookSpeed);
         pivotAngle = pivotAngle - (inputManager.cameraInputY * cameraPivotSpeed);
         pivotAngle = Mathf.Clamp(pivotAngle, minimumPivotAngle, maximumPivotAngle);
 
-        rotation = Vector3.zero;
-        rotation.y = lookAngle;
-        targetRotation = Quaternion.Euler(rotation);
-        transform.rotation = targetRotation;
+        Quaternion targetHorizontalRotation = Quaternion.Euler(0, lookAngle, 0);
+        Quaternion targetVerticalRotation = Quaternion.Euler(pivotAngle, 0, 0);
 
-        rotation = Vector3.zero;
-        rotation.x = pivotAngle;
-        targetRotation = Quaternion.Euler(rotation);
-        cameraPivot.localRotation = targetRotation;
+        transform.rotation = Quaternion.Slerp(
+            transform.rotation,
+            targetHorizontalRotation,
+            rotationSmoothSpeed * Time.deltaTime);
+
+        cameraPivot.localRotation = Quaternion.Slerp(
+            cameraPivot.localRotation,
+            targetVerticalRotation,
+            rotationSmoothSpeed * Time.deltaTime);
     }
 
     private void HandleCameraCollisions()
     {
-        float targetPosition = defaultPosition;
+        float targetPosition = currentTargetZoom_Z;
+
         RaycastHit hit;
         Vector3 direction = cameraTransform.position - cameraPivot.position;
         direction.Normalize();
@@ -80,8 +106,7 @@ public class CameraManager : MonoBehaviour
             (cameraPivot.transform.position, cameraCollisionRadius, direction, out hit, Mathf.Abs(targetPosition), collisionsLayers))
         {
             float distance = Vector3.Distance(cameraPivot.position, hit.point);
-            targetPosition =- (distance - cameraCollisionOffSet);
-             Debug.DrawRay(cameraPivot.position, direction * Mathf.Abs(targetPosition), Color.green);
+            targetPosition = -(distance - cameraCollisionOffSet);
         }
 
         if (Mathf.Abs(targetPosition) < minimumCollisionOffSet)
@@ -89,7 +114,11 @@ public class CameraManager : MonoBehaviour
             targetPosition = targetPosition - minimumCollisionOffSet;
         }
 
-        cameraVectorPosition.z = Mathf.Lerp(cameraTransform.localPosition.z, targetPosition, 0.2f);
-        cameraTransform.localPosition = cameraVectorPosition;
+        Vector3 newLocalPosition = cameraTransform.localPosition;
+
+        newLocalPosition.z = Mathf.Lerp(newLocalPosition.z, targetPosition, zoomSmoothSpeed * Time.deltaTime);
+
+        cameraTransform.localPosition = newLocalPosition;
+
     }
 }

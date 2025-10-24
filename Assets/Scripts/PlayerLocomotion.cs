@@ -5,6 +5,7 @@ public class PlayerLocomotion : MonoBehaviour
     PlayerManager playerManager;
     AnimatorManager animatorManager;
     InputManager inputManager;
+    PlayerResource playerResource;
 
     Vector3 moveDirection;
     Transform cameraObject;
@@ -16,6 +17,9 @@ public class PlayerLocomotion : MonoBehaviour
     public float fallingVelocity;
     public float rayCastHeightOffSet = 0.5f;
     public LayerMask groundLayer;
+
+    [Header("Jumping")]
+    [SerializeField] private float jumpForce = 8f;
 
     [Header("Movement Flags")]
     public bool isSprinting;
@@ -32,6 +36,7 @@ public class PlayerLocomotion : MonoBehaviour
         playerManager = GetComponent<PlayerManager>();
         animatorManager = GetComponent<AnimatorManager>();
         inputManager = GetComponent<InputManager>();
+        playerResource = GetComponent<PlayerResource>();
         playerRigidbody = GetComponent<Rigidbody>();
         cameraObject = Camera.main.transform;
     }
@@ -43,6 +48,7 @@ public class PlayerLocomotion : MonoBehaviour
         if (playerManager.isInteracting)
             return;
 
+        HandleJumping();
         HandleMovement();
         HandleRotation();
     }
@@ -70,8 +76,9 @@ public class PlayerLocomotion : MonoBehaviour
             }
         }
 
-        Vector3 movementVelocity = moveDirection;
-        playerRigidbody.linearVelocity = movementVelocity;
+        Vector3 newVelocity = moveDirection;
+        newVelocity.y = playerRigidbody.linearVelocity.y;
+        playerRigidbody.linearVelocity = newVelocity;
     }
 
     private void HandleRotation()
@@ -94,9 +101,6 @@ public class PlayerLocomotion : MonoBehaviour
     {
         RaycastHit hit;
         Vector3 rayCastOrigin = transform.position;
-
-        // CORRECCIÓN 1: Se cambia la multiplicación (*) por una suma (+).
-        // El origen del rayo ahora se calcula correctamente, un poco por encima del personaje.
         rayCastOrigin.y += rayCastHeightOffSet;
 
         if (!isGrounded)
@@ -105,33 +109,41 @@ public class PlayerLocomotion : MonoBehaviour
             {
                 animatorManager.PlayTargetAnimation("Falling", true);
             }
-
             inAirTimer = inAirTimer + Time.deltaTime;
-
-            // CORRECCIÓN 3: Se elimina o comenta esta línea.
-            // Esta fuerza se aplicaba en cada frame, haciendo que el personaje saliera volando.
-            // Al quitarla, solo se aplica la fuerza de caída, que es el comportamiento esperado.
-            // playerRigidbody.AddForce(transform.forward * leapingVelocity);
-
-            playerRigidbody.AddForce(-Vector3.up * fallingVelocity * inAirTimer);
         }
 
-        // CORRECCIÓN 2: Se añade una distancia máxima al SphereCast.
-        // Ahora el rayo solo buscará el suelo en una distancia corta y razonable.
-        // El valor `rayCastHeightOffSet + 0.2f` es una distancia segura para detectar el suelo justo debajo.
         if (Physics.SphereCast(rayCastOrigin, 0.2f, -Vector3.up, out hit, rayCastHeightOffSet + 0.2f, groundLayer))
         {
             if (!isGrounded && !playerManager.isInteracting)
             {
                 animatorManager.PlayTargetAnimation("Land", true);
             }
-
             inAirTimer = 0;
             isGrounded = true;
         }
         else
         {
             isGrounded = false;
+        }
+    }
+
+    private void HandleJumping()
+    {
+        Debug.Log($"HandleJumping Check: jump_Input = {inputManager.jump_Input}, isGrounded = {isGrounded}");
+
+        if (inputManager.jump_Input && isGrounded)
+        {
+            inputManager.jump_Input = false;
+
+            if (playerResource.ConsumeForJump())
+            {
+                playerRigidbody.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
+                animatorManager.PlayTargetAnimation("Falling", false);
+            }
+            else
+            {
+                Debug.Log("<color=red>¡SALTO BLOQUEADO!</color> No hay suficiente luz.");
+            }
         }
     }
 }

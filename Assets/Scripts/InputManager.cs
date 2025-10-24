@@ -1,9 +1,9 @@
 using System;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class InputManager : MonoBehaviour
-
 {
     PlayerControls playerControls;
     PlayerLocomotion playerLocomotion;
@@ -19,7 +19,8 @@ public class InputManager : MonoBehaviour
     public float verticalInput;
     public float horizontalInput;
 
-    public bool b_Input;
+    public bool b_Input; // Sprint
+    public bool jump_Input;
 
     private void Awake()
     {
@@ -39,6 +40,11 @@ public class InputManager : MonoBehaviour
             playerControls.PlayerActions.B.performed += i => b_Input = true;
             playerControls.PlayerActions.B.canceled += i => b_Input = false;
 
+            playerControls.PlayerActions.Jump.performed += i =>
+            {
+                jump_Input = true;
+                Debug.Log("<color=cyan>¡EVENTO DE SALTO RECIBIDO!</color> (InputManager)");
+            };
         }
 
         playerControls.Enable();
@@ -46,15 +52,13 @@ public class InputManager : MonoBehaviour
 
     private void OnDisable()
     {
-     playerControls.Disable();  
+        playerControls.Disable();
     }
 
     public void HandleAllInputs()
     {
         HandleMovementInput();
         HandleSprintingInput();
-        //HandleJump
-        //HandleDash
     }
 
     private void HandleMovementInput()
