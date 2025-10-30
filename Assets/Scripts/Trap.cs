@@ -4,69 +4,107 @@ using UnityEngine;
 public class Trap : MonoBehaviour
 {
     [Header("Configuración de la Trampa")]
-    [Tooltip("Segundos de luz que esta trampa quita al jugador")]
-    [SerializeField] private float lightDamage = 5.0f;
+    [Tooltip("Segundos de luz que quita por segundo")]
+    [SerializeField] private float lightDamagePerSecond = 2.0f;
 
-    [Header("Efectos de Feedback (Opcional)")]
-    [Tooltip("Prefab de partículas que se instancia al tocar la trampa (ej. un 'splash')")]
-    [SerializeField] private GameObject activationParticles;
+    [Header("Efectos de Feedback")]
+    [Tooltip("ParticleSystem")]
+    [SerializeField] private ParticleSystem activationParticles;
 
-    [Tooltip("Sonido que se reproduce al tocar la trampa (ej. un 'sizzle' o 'splash')")]
-    [SerializeField] private AudioClip activationSound;
+    [Tooltip("El script controla Play/Stop/Emit de las partículas al dañar? (Desmarcar para zonas con partículas siempre activas)")]
+    [SerializeField] private bool controlParticlesOnDamage = true;
+    [Tooltip("Cuántas partículas emitir cada vez que se aplica daño (si controlParticlesOnDamage está en 'Emit') - No usado en Play/Stop")]
+    [SerializeField] private int particlesPerHit = 15;
+    [Tooltip("Sonido que se reproduce CADA VEZ que se aplica daño")]
+    [SerializeField] private AudioClip damageTickSound;
 
-    [Header("Configuración de Re-activación")]
-    [Tooltip("Si se marca, la trampa se puede re-usar después del 'cooldown'")]
-    [SerializeField] private bool canReactivate = false;
-    [SerializeField] private float reactivationCooldown = 3.0f;
+    [Header("Configuración de Daño Continuo")]
+    [Tooltip("Tiempo en segundos entre cada tick de daño mientras se está dentro")]
+    [SerializeField] private float damageTickRate = 1.0f;
 
     private Collider trapCollider;
-    private bool isReady = true;
+    private float lastDamageTime = -Mathf.Infinity;
+    private PlayerResource currentPlayerResource = null;
 
     private void Awake()
     {
         trapCollider = GetComponent<Collider>();
         trapCollider.isTrigger = true;
-        isReady = true;
+
+        if (activationParticles != null && controlParticlesOnDamage)
+        {
+            activationParticles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            var main = activationParticles.main;
+            if (main.playOnAwake)
+            {
+                Debug.LogWarning("Trap: ParticleSystem tiene 'Play On Awake'. Se desactivará porque controlParticlesOnDamage=true.", this);
+                main.playOnAwake = false;
+            }
+        }
+        else if (activationParticles == null)
+        {
+            Debug.LogWarning("Trap: No se ha asignado un ParticleSystem en activationParticles.", this);
+        }
     }
 
     private void OnTriggerEnter(Collider other)
     {
-        if (!isReady || !other.CompareTag("Player"))
+        if (other.CompareTag("Player"))
         {
-            return;
-        }
+            currentPlayerResource = other.GetComponent<PlayerResource>();
 
-        PlayerResource player = other.GetComponent<PlayerResource>();
-
-        if (player != null && player.IsAlive)
-        {
-            player.TakeDamage(lightDamage);
-
-            if (activationSound)
+            if (activationParticles != null && controlParticlesOnDamage)
             {
-                AudioSource.PlayClipAtPoint(activationSound, transform.position);
+                activationParticles.Play();
             }
-
-            if (activationParticles)
-            {
-                Instantiate(activationParticles, other.transform.position, Quaternion.identity);
-            }
-
-            if (canReactivate)
-            {
-                isReady = false;
-                Invoke(nameof(Reactivate), reactivationCooldown);
-            }
-            else
-            {
-                Destroy(gameObject);
-            }
+            lastDamageTime = Time.time - damageTickRate;
         }
     }
 
-    private void Reactivate()
+
+    private void OnTriggerStay(Collider other)
     {
-        Debug.Log("Trampa reactivada");
-        isReady = true;
+        if (currentPlayerResource != null && currentPlayerResource.IsAlive)
+        {
+            if (Time.time >= lastDamageTime + damageTickRate)
+            {
+                ApplyDamageAndSound();
+                lastDamageTime = Time.time;
+            }
+        }
+
+        else if (currentPlayerResource != null && !currentPlayerResource.IsAlive)
+        {
+            StopEffects();
+        }
+    }
+
+    private void OnTriggerExit(Collider other)
+    {
+        if (other.CompareTag("Player"))
+        {
+            StopEffects();
+            currentPlayerResource = null;
+            lastDamageTime = -Mathf.Infinity;
+        }
+    }
+    private void ApplyDamageAndSound()
+    {
+        if (currentPlayerResource == null || !currentPlayerResource.IsAlive) return;
+
+        float damageAmount = lightDamagePerSecond * damageTickRate;
+        currentPlayerResource.TakeDamage(damageAmount);
+
+        if (damageTickSound)
+        {
+            AudioSource.PlayClipAtPoint(damageTickSound, transform.position);
+        }
+    }
+    private void StopEffects()
+    {
+        if (activationParticles != null && controlParticlesOnDamage)
+        {
+            activationParticles.Stop();
+        }
     }
 }

@@ -3,21 +3,32 @@ using UnityEngine;
 [RequireComponent(typeof(Collider))]
 public class TorchCheckpoint : MonoBehaviour
 {
-    [Header("Efectos (Opcional)")]
-    [SerializeField] private Light torchLight;
-    [SerializeField] private GameObject activationParticles;
+    [Header("Componentes a Controlar")]
+    [Tooltip("GameObject del cristal")]
+    [SerializeField] private GameObject crystalVisualObject;
+    [Tooltip("Luz encendida (Point Light)")]
+    [SerializeField] private Light persistentLight;
+    [Tooltip("Partículas que se activan")]
+    [SerializeField] private ParticleSystem activationParticles;
+    [Tooltip("Sonido que se reproduce al activar")]
     [SerializeField] private AudioClip activationSound;
 
     private bool hasBeenUsed = false;
+    private Collider myCollider;
 
     private void Awake()
     {
-        GetComponent<Collider>().isTrigger = true;
+        myCollider = GetComponent<Collider>();
+        myCollider.isTrigger = true;
 
-        if (torchLight) torchLight.enabled = false;
+        if (persistentLight)
+            persistentLight.enabled = true;
+
+        if (crystalVisualObject)
+            crystalVisualObject.SetActive(true);
 
         if (activationParticles)
-            activationParticles.SetActive(false);
+            activationParticles.Stop();
     }
 
     private void OnTriggerEnter(Collider other)
@@ -34,17 +45,18 @@ public class TorchCheckpoint : MonoBehaviour
             hasBeenUsed = true;
             player.Recharge();
 
-            if (torchLight)
-                torchLight.enabled = true;
-
             if (activationParticles)
-                activationParticles.SetActive(true);
+                activationParticles.Play();
 
             if (activationSound)
             {
                 AudioSource.PlayClipAtPoint(activationSound, transform.position);
             }
-            Destroy(gameObject);
+
+            if (crystalVisualObject)
+                Destroy(crystalVisualObject);
+
+            myCollider.enabled = false;
         }
     }
 }
